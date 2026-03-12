@@ -29,11 +29,11 @@ def find_port():
 
 PORT = find_port()
 COMMANDS = [
-    "humidity <0-100>",
-    "fullness <0-100>",
-    "day",
-    "day <number>",
-    "status",
+    "h <0-100>",
+    "f <0-100>",
+    "d",
+    "d <number>",
+    "s",
 ]
 
 def read_serial(ser):
@@ -75,20 +75,32 @@ def main():
         parts = lower.split()
         valid = False
 
-        if lower == "status":
+        if lower in ("s", "status"):
+            cmd = "status"
             valid = True
-        elif len(parts) == 2 and parts[0] in ("humidity", "fullness"):
+        elif len(parts) == 2 and parts[0] in ("h", "humidity"):
             try:
                 val = int(parts[1])
                 if 0 <= val <= 100:
+                    cmd = f"humidity {val}"
                     valid = True
             except ValueError:
                 pass
-        elif lower == "day":
+        elif len(parts) == 2 and parts[0] in ("f", "fullness"):
+            try:
+                val = int(parts[1])
+                if 0 <= val <= 100:
+                    cmd = f"fullness {val}"
+                    valid = True
+            except ValueError:
+                pass
+        elif lower in ("d", "day"):
+            cmd = "day"
             valid = True
-        elif len(parts) == 2 and parts[0] == "day":
+        elif len(parts) == 2 and parts[0] in ("d", "day"):
             try:
                 int(parts[1])
+                cmd = f"day {parts[1]}"
                 valid = True
             except ValueError:
                 pass

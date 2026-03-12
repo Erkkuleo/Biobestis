@@ -18,9 +18,6 @@ unsigned long lastDataSwitch = 0;
 unsigned long lastDayCheck = 0;
 int dataState = 0;  // 0=fullness, 1=humidity, 2=emptied days
 
-static const char* statusLabels[6] = {
-    "Great!", "Good", "OK", "Meh", "Bad", "Critical!"
-};
 
 void saveDaysSinceEmpty(uint16_t days) {
     prefs.putUShort("days", days);
@@ -32,7 +29,8 @@ int getDaysSinceEmpty() {
 
 void updateEyeStatus() {
     int days = getDaysSinceEmpty();
-    int worstSegment = max({min(fullnessamount / 17, 5), min(humidity / 17, 5), min(days, 5)});
+    // int worstSegment = max({min(fullnessamount / 17, 5), min(humidity / 17, 5), min(days, 5)});
+    int worstSegment = min(days, 5);
     eyeCtrl.drawBitmap((const unsigned char*)pgm_read_ptr(&statusBitmaps[worstSegment]));
 }
 
@@ -107,6 +105,7 @@ void loop() {
     if (btnPressed && !btnWasPressed) {
         Serial.println("Button pressed! Resetting fullness and empty timestamp.");
         fullnessamount = 0;
+        humidity = 0;
         saveDaysSinceEmpty(0);
         drawCurrentDataScreen();
         updateEyeStatus();
