@@ -113,14 +113,7 @@ void loop() {
     }
     btnWasPressed = btnPressed;
 
-    // Refresh days display once per minute
-    if (millis() - lastDayCheck >= 60000) {
-        lastDayCheck = millis();
-        if (dataState == 2) drawCurrentDataScreen();
-        updateEyeStatus();
-    }
-
-    if (millis() - lastDataSwitch >= 10000) {
+    if (millis() - lastDataSwitch >= 5000) {
         lastDataSwitch = millis();
         dataState = (dataState + 1) % 3;
         drawCurrentDataScreen();
