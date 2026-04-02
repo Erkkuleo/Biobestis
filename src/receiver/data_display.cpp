@@ -1,92 +1,76 @@
-#include <Wire.h>
-#include <Adafruit_SSD1306.h>
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7789.h>
 #include "data_display.h"
-#include "tca9548a.h"
 
-#define SCREEN_WIDTH   128
-#define SCREEN_HEIGHT   32
-#define OLED_RESET      -1
-#define SCREEN_ADDRESS 0x3C
-#define TCA_CHANNEL     1
+#define SCREEN_WIDTH   320
+#define SCREEN_HEIGHT  170
+#define TFT_CS         D9
+#define TFT_DC         D3
+#define TFT_RST        -1   // shared RST already pulsed by eye display init
 
-static Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+extern SPIClass dispSPI;
+static Adafruit_ST7789 display(&dispSPI, TFT_CS, TFT_DC, TFT_RST);
 
 DataDisplayController dataCtrl;
 
 void DataDisplayController::init() {
-    tcaSelect(TCA_CHANNEL);
-    if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-        Serial.println("dataDisplay init failed");
-        return;
-    }
-    display.clearDisplay();
-    tcaSelect(TCA_CHANNEL);
-    display.display();
+    display.init(170, 320);
+    display.setRotation(1);
+    display.fillScreen(ST77XX_BLACK);
 }
 
 void DataDisplayController::test() {
-    tcaSelect(TCA_CHANNEL);
-    display.fillScreen(SSD1306_WHITE);
-    display.display();
+    display.fillScreen(ST77XX_WHITE);
     delay(500);
-
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
+    display.fillScreen(ST77XX_BLACK);
+    display.setTextSize(2);
+    display.setTextColor(ST77XX_WHITE);
     display.setCursor(0, 0);
     display.println("dataDisplay OK");
-    tcaSelect(TCA_CHANNEL);
-    display.display();
     delay(2000);
-
-    display.clearDisplay();
-    display.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);
-    tcaSelect(TCA_CHANNEL);
-    display.display();
+    display.fillScreen(ST77XX_BLACK);
+    display.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, ST77XX_WHITE);
 }
 
 void DataDisplayController::drawCenteredText(const char* text, int textSize) {
     int16_t x1, y1;
     uint16_t w, h;
-    display.clearDisplay();
+    display.fillScreen(ST77XX_BLACK);
     display.setTextSize(textSize);
+    display.setTextColor(ST77XX_WHITE);
     display.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
     display.setCursor((SCREEN_WIDTH - w) / 2, (SCREEN_HEIGHT - h) / 2);
-    display.setTextColor(SSD1306_WHITE);
     display.print(text);
-    tcaSelect(TCA_CHANNEL);
-    display.display();
 }
 
 void DataDisplayController::drawTextWithProgress(const char* text, int progress) {
-    // Layout (vertically centered): text (8px) + 4px gap + bar (6px) = 18px total
-    const int startY   = (SCREEN_HEIGHT - 18) / 2; // = 7
-    const int barY     = startY + 12;
-    const int barH     = 6;
-    const int barX     = 2;
-    const int barW     = SCREEN_WIDTH - 4;
-    const int fillW    = (barW * constrain(progress, 0, 100)) / 100;
+    const int textSz  = 2;
+    const int charH   = 16;  // textSize 2 = 8px * 2
+    const int barH    = 15;
+    const int gap     = 8;
+    const int totalH  = charH + gap + barH;
+    const int startY  = (SCREEN_HEIGHT - totalH) / 2;
+    const int barY    = startY + charH + gap;
+    const int barX    = 10;
+    const int barW    = SCREEN_WIDTH - 20;
+    const int fillW   = (barW * constrain(progress, 0, 100)) / 100;
 
     int16_t x1, y1;
     uint16_t w, h;
 
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
+    display.fillScreen(ST77XX_BLACK);
+    display.setTextSize(textSz);
+    display.setTextColor(ST77XX_WHITE);
     display.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
     display.setCursor((SCREEN_WIDTH - w) / 2, startY);
     display.print(text);
 
-    display.drawRect(barX, barY, barW, barH, SSD1306_WHITE);
+    display.drawRect(barX, barY, barW, barH, ST77XX_WHITE);
     if (fillW > 0)
-        display.fillRect(barX, barY, fillW, barH, SSD1306_WHITE);
-
-    tcaSelect(TCA_CHANNEL);
-    display.display();
+        display.fillRect(barX, barY, fillW, barH, ST77XX_WHITE);
 }
 
 void DataDisplayController::clear() {
-    display.clearDisplay();
-    tcaSelect(TCA_CHANNEL);
-    display.display();
+    display.fillScreen(ST77XX_BLACK);
 }

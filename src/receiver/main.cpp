@@ -1,11 +1,11 @@
 #include <Arduino.h>
-#include <Wire.h>
 #include <WiFi.h>
+#include <esp_now.h>
 #include <Preferences.h>
-#include <wifi_controller.h>
 #include "eye_display.h"
 #include "data_display.h"
 #include "art/bitmaps.h"
+#include "../shared/protocol.h"
 
 const int led = D10;
 const int resetBtn = D1;
@@ -14,6 +14,18 @@ Preferences prefs;
 
 int fullnessamount = 0;
 int humidity = 65;
+
+static volatile bool newData = false;
+static SensorPacket pendingPkt;
+
+void onReceive(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
+    if (len < (int)sizeof(SensorPacket)) return;
+    SensorPacket pkt;
+    memcpy(&pkt, data, sizeof(pkt));
+    if (!packetValid(pkt)) return;
+    memcpy(&pendingPkt, &pkt, sizeof(pkt));
+    newData = true;
+}
 unsigned long lastDataSwitch = 0;
 unsigned long lastDayCheck = 0;
 int dataState = 0;  // 0=fullness, 1=humidity, 2=emptied days
@@ -27,10 +39,15 @@ int getDaysSinceEmpty() {
     return (int)prefs.getUShort("days", 0);
 }
 
+static int lastEyeSegment = -1;
+
 void updateEyeStatus() {
-    int days = getDaysSinceEmpty();
-    // int worstSegment = max({min(fullnessamount / 17, 5), min(humidity / 17, 5), min(days, 5)});
-    int worstSegment = min(days, 5);
+    int segFullness  = constrain(fullnessamount / 20, 0, 5);
+    int segHumidity  = constrain((humidity - 30) / 14, 0, 5);
+    int segDays      = constrain(getDaysSinceEmpty(), 0, 5);
+    int worstSegment = max({segFullness, segHumidity, segDays});
+    if (worstSegment == lastEyeSegment) return;
+    lastEyeSegment = worstSegment;
     eyeCtrl.drawBitmap((const unsigned char*)pgm_read_ptr(&statusBitmaps[worstSegment]));
 }
 
@@ -40,11 +57,11 @@ void drawCurrentDataScreen() {
     } else if (dataState == 1) {
         char buf[20];
         snprintf(buf, sizeof(buf), "Humidity: %d %%", humidity);
-        dataCtrl.drawCenteredText(buf, 1);
+        dataCtrl.drawCenteredText(buf, 2);
     } else {
         char buf[24];
         snprintf(buf, sizeof(buf), "Emptied %d days ago", getDaysSinceEmpty());
-        dataCtrl.drawCenteredText(buf, 1);
+        dataCtrl.drawCenteredText(buf, 2);
     }
 }
 
@@ -52,11 +69,17 @@ void setup() {
     Serial.begin(115200);
     pinMode(led, OUTPUT);
     pinMode(resetBtn, INPUT_PULLUP);
-    wifi_connect("aalto open", "");
+
+    WiFi.mode(WIFI_STA);
+    if (esp_now_init() != ESP_OK) {
+        Serial.println("ESP-NOW init failed");
+    } else {
+        esp_now_register_recv_cb(onReceive);
+        Serial.println("ESP-NOW ready");
+    }
 
     prefs.begin("kayttiselain", false);
 
-    Wire.begin(D4, D5);
     eyeCtrl.init();
     updateEyeStatus();
 
@@ -98,6 +121,22 @@ void handleSerial() {
 }
 
 void loop() {
+    if (newData) {
+        newData = false;
+        bool fullnessChanged = (pendingPkt.fullness != fullnessamount);
+        bool humidityChanged = (pendingPkt.humidity  != humidity);
+        fullnessamount = pendingPkt.fullness;
+        humidity       = pendingPkt.humidity;
+        if (fullnessChanged || humidityChanged) {
+            updateEyeStatus();
+        }
+        bool affectsScreen = (dataState == 0 && fullnessChanged) ||
+                             (dataState == 1 && humidityChanged);
+        if (affectsScreen) {
+            drawCurrentDataScreen();
+        }
+    }
+
     handleSerial();
 
     static bool btnWasPressed = false;

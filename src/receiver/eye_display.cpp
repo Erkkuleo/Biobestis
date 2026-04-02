@@ -1,60 +1,61 @@
-#include <Wire.h>
-#include <Adafruit_SSD1306.h>
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7789.h>
+#include <pgmspace.h>
 #include "eye_display.h"
-#include "tca9548a.h"
 #include "art/bitmaps.h"
 
-#define SCREEN_WIDTH   128
-#define SCREEN_HEIGHT   32
-#define OLED_RESET      -1
-#define SCREEN_ADDRESS 0x3C
-#define TCA_CHANNEL     0
+#define SCREEN_WIDTH   320
+#define SCREEN_HEIGHT  170
+#define TFT_CS         D7
+#define TFT_DC         D3
+#define TFT_RST        D2
 
-static Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+SPIClass dispSPI(FSPI);
+static Adafruit_ST7789 display(&dispSPI, TFT_CS, TFT_DC, TFT_RST);
 
 EyeDisplayController eyeCtrl;
 
 void EyeDisplayController::init() {
-    tcaSelect(TCA_CHANNEL);
-    if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-        Serial.println("eyeDisplay init failed");
-        return;
-    }
-    display.clearDisplay();
-    tcaSelect(TCA_CHANNEL);
-    display.display();
+    dispSPI.begin(D8, -1, D10);
+    display.init(170, 320);
+    display.setRotation(1);
+    display.fillScreen(ST77XX_BLACK);
 }
 
 void EyeDisplayController::test() {
-    tcaSelect(TCA_CHANNEL);
-    display.fillScreen(SSD1306_WHITE);
-    display.display();
+    display.fillScreen(ST77XX_WHITE);
     delay(500);
-
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
+    display.fillScreen(ST77XX_BLACK);
+    display.setTextSize(2);
+    display.setTextColor(ST77XX_WHITE);
     display.setCursor(0, 0);
     display.println("eyeDisplay OK");
-    tcaSelect(TCA_CHANNEL);
-    display.display();
     delay(2000);
-
-    display.clearDisplay();
-    display.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);
-    tcaSelect(TCA_CHANNEL);
-    display.display();
+    display.fillScreen(ST77XX_BLACK);
+    display.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, ST77XX_WHITE);
 }
 
 void EyeDisplayController::drawBitmap(const unsigned char* bitmap) {
-    display.clearDisplay();
-    display.drawBitmap(0, 0, bitmap, EYE_W, EYE_H, SSD1306_WHITE);
-    tcaSelect(TCA_CHANNEL);
-    display.display();
+    const int SCALE = 2;
+    const int BMP_W = EYE_W;
+    const int BMP_H = EYE_H;
+    const int ox = (SCREEN_WIDTH  - BMP_W * SCALE) / 2;
+    const int oy = (SCREEN_HEIGHT - BMP_H * SCALE) / 2;
+
+    display.startWrite();
+    display.writeFillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, ST77XX_BLACK);
+    for (int y = 0; y < BMP_H; y++) {
+        for (int x = 0; x < BMP_W; x++) {
+            uint8_t b = pgm_read_byte(&bitmap[y * (BMP_W / 8) + x / 8]);
+            if (b & (0x80 >> (x % 8))) {
+                display.writeFillRect(ox + x * SCALE, oy + y * SCALE, SCALE, SCALE, ST77XX_WHITE);
+            }
+        }
+    }
+    display.endWrite();
 }
 
 void EyeDisplayController::clear() {
-    display.clearDisplay();
-    tcaSelect(TCA_CHANNEL);
-    display.display();
+    display.fillScreen(ST77XX_BLACK);
 }
